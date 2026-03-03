@@ -11,7 +11,7 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 # ================================================================
 $form                 = New-Object System.Windows.Forms.Form
 $form.Text            = "Edge Obliterator"
-$form.Size            = New-Object System.Drawing.Size(660, 620)
+$form.Size            = New-Object System.Drawing.Size(660, 740)
 $form.StartPosition   = "CenterScreen"
 $form.BackColor       = [System.Drawing.Color]::FromArgb(10, 10, 18)
 $form.FormBorderStyle = "FixedSingle"
@@ -22,7 +22,7 @@ $form.Font            = New-Object System.Drawing.Font("Consolas", 9)
 # TAB CONTROL
 # ================================================================
 $tabControl                  = New-Object System.Windows.Forms.TabControl
-$tabControl.Size             = New-Object System.Drawing.Size(644, 580)
+$tabControl.Size             = New-Object System.Drawing.Size(644, 700)
 $tabControl.Location         = New-Object System.Drawing.Point(0, 0)
 $tabControl.Appearance       = "Normal"
 $tabControl.DrawMode         = "OwnerDrawFixed"
@@ -242,6 +242,54 @@ $tab2.Controls.Add($btnCopilot)
 
 $btnCopilot.Add_MouseEnter({ $btnCopilot.BackColor = [System.Drawing.Color]::FromArgb(130, 30, 200) })
 $btnCopilot.Add_MouseLeave({ $btnCopilot.BackColor = [System.Drawing.Color]::FromArgb(100, 20, 160) })
+
+$sep4           = New-Object System.Windows.Forms.Panel
+$sep4.Size      = New-Object System.Drawing.Size(600, 1)
+$sep4.Location  = New-Object System.Drawing.Point(20, 515)
+$sep4.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 60)
+$tab2.Controls.Add($sep4)
+
+$lblBingTitle           = New-Object System.Windows.Forms.Label
+$lblBingTitle.Text      = "BLOCK BING SEARCH (FIREWALL IP LEVEL)"
+$lblBingTitle.Font      = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Bold)
+$lblBingTitle.ForeColor = [System.Drawing.Color]::FromArgb(60, 220, 255)
+$lblBingTitle.AutoSize  = $true
+$lblBingTitle.Location  = New-Object System.Drawing.Point(20, 525)
+$tab2.Controls.Add($lblBingTitle)
+
+$lblBingDesc           = New-Object System.Windows.Forms.Label
+$lblBingDesc.Text      = "Fetches Microsoft official IP list, blocks Bing at firewall + hosts level"
+$lblBingDesc.Font      = New-Object System.Drawing.Font("Consolas", 8)
+$lblBingDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 100, 130)
+$lblBingDesc.AutoSize  = $true
+$lblBingDesc.Location  = New-Object System.Drawing.Point(20, 545)
+$tab2.Controls.Add($lblBingDesc)
+
+$logBing             = New-Object System.Windows.Forms.RichTextBox
+$logBing.Size        = New-Object System.Drawing.Size(600, 70)
+$logBing.Location    = New-Object System.Drawing.Point(20, 563)
+$logBing.BackColor   = [System.Drawing.Color]::FromArgb(5, 5, 12)
+$logBing.ForeColor   = [System.Drawing.Color]::FromArgb(0, 230, 120)
+$logBing.Font        = New-Object System.Drawing.Font("Consolas", 9)
+$logBing.ReadOnly    = $true
+$logBing.BorderStyle = "None"
+$logBing.ScrollBars  = "Vertical"
+$tab2.Controls.Add($logBing)
+
+$btnBing                           = New-Object System.Windows.Forms.Button
+$btnBing.Text                      = "BLOCK BING SEARCH"
+$btnBing.Size                      = New-Object System.Drawing.Size(600, 40)
+$btnBing.Location                  = New-Object System.Drawing.Point(20, 640)
+$btnBing.BackColor                 = [System.Drawing.Color]::FromArgb(0, 100, 160)
+$btnBing.ForeColor                 = [System.Drawing.Color]::White
+$btnBing.Font                      = New-Object System.Drawing.Font("Consolas", 11, [System.Drawing.FontStyle]::Bold)
+$btnBing.FlatStyle                 = "Flat"
+$btnBing.FlatAppearance.BorderSize = 0
+$btnBing.Cursor                    = [System.Windows.Forms.Cursors]::Hand
+$tab2.Controls.Add($btnBing)
+
+$btnBing.Add_MouseEnter({ $btnBing.BackColor = [System.Drawing.Color]::FromArgb(0, 130, 200) })
+$btnBing.Add_MouseLeave({ $btnBing.BackColor = [System.Drawing.Color]::FromArgb(0, 100, 160) })
 
 # ================================================================
 # SHARED LOG HELPER
@@ -954,4 +1002,88 @@ $btnExecute3.Add_Click({ $btnPurge.PerformClick() })
 # Expand form and tab to fit both buttons
 $form.Size        = New-Object System.Drawing.Size(660, 780)
 $tabControl.Size  = New-Object System.Drawing.Size(644, 740)
+# ================================================================
+# TAB 2C - BLOCK BING LOGIC
+# ================================================================
+$btnBing.Add_Click({
+    $btnBing.Text = "RUNNING..."
+    $logBing.Clear()
+    Write-ToBox $logBing "Starting Bing firewall block..." "Cyan"
+
+    Write-ToBox $logBing "[1/4] Fetching Microsoft official Bing IP list..." "Yellow"
+    $allIPs = [System.Collections.Generic.HashSet[string]]::new()
+    try {
+        $resp = Invoke-WebRequest -Uri "https://www.bing.com/toolbox/bingbot.json" -UseBasicParsing -TimeoutSec 10
+        $json = $resp.Content | ConvertFrom-Json
+        $fetched = 0
+        foreach ($prefix in $json.prefixes) {
+            if ($prefix.ipv4Prefix) { [void]$allIPs.Add($prefix.ipv4Prefix); $fetched++ }
+        }
+        Write-ToBox $logBing "    Got $fetched ranges from official list." "Green"
+    } catch {
+        Write-ToBox $logBing "    Could not fetch (offline?). Using hardcoded fallback." "Yellow"
+    }
+
+    Write-ToBox $logBing "[2/4] Adding hardcoded Bing IP ranges..." "Yellow"
+    $knownRanges = @(
+        "204.79.197.200/32","204.79.197.0/24","204.79.135.0/24",
+        "13.107.21.0/24","13.107.42.0/24","40.90.4.0/24",
+        "20.36.0.0/14","20.40.0.0/13","20.48.0.0/12","20.64.0.0/10",
+        "20.128.0.0/16","20.150.0.0/15","20.160.0.0/12","20.176.0.0/14",
+        "20.184.0.0/13","20.192.0.0/10","40.74.0.0/14","40.80.0.0/12",
+        "40.96.0.0/12","40.112.0.0/13","40.120.0.0/14","104.40.0.0/13",
+        "104.208.0.0/13","157.55.0.0/17","157.56.0.0/14","199.30.16.0/20"
+    )
+    foreach ($r in $knownRanges) { [void]$allIPs.Add($r) }
+    Write-ToBox $logBing "    Added $($knownRanges.Count) hardcoded ranges." "Green"
+
+    Write-ToBox $logBing "[3/4] Resolving Bing domains via DNS..." "Yellow"
+    $bingDomains = @("bing.com","www.bing.com","r.bing.com","cn.bing.com","edgeservices.bing.com","search.msn.com","api.bing.com","th.bing.com","mm.bing.net")
+    $resolved = 0
+    foreach ($dom in $bingDomains) {
+        try {
+            $ips = [System.Net.Dns]::GetHostAddresses($dom) | ForEach-Object { $_.IPAddressToString }
+            foreach ($ip in $ips) {
+                if ($ip -match "^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$") { [void]$allIPs.Add("$ip/32"); $resolved++ }
+            }
+        } catch { }
+    }
+    Write-ToBox $logBing "    Resolved $resolved IPs from DNS." "Green"
+
+    Write-ToBox $logBing "[4/4] Applying firewall rules + hosts patch..." "Yellow"
+    Remove-NetFirewallRule -DisplayName "Block Bing - Outbound*" -ErrorAction SilentlyContinue
+    Remove-NetFirewallRule -DisplayName "Block Bing - Inbound*"  -ErrorAction SilentlyContinue
+    $ipList    = @($allIPs)
+    $chunkSize = 500
+    $chunks    = [Math]::Ceiling($ipList.Count / $chunkSize)
+    for ($i = 0; $i -lt $chunks; $i++) {
+        $start  = $i * $chunkSize
+        $end    = [Math]::Min($start + $chunkSize - 1, $ipList.Count - 1)
+        $chunk  = $ipList[$start..$end]
+        $suffix = if ($chunks -gt 1) { " [$($i+1)]" } else { "" }
+        New-NetFirewallRule -DisplayName "Block Bing - Outbound$suffix" -Direction Outbound -Action Block -RemoteAddress $chunk -Protocol Any -Profile Any -Enabled True -ErrorAction SilentlyContinue | Out-Null
+        New-NetFirewallRule -DisplayName "Block Bing - Inbound$suffix"  -Direction Inbound  -Action Block -RemoteAddress $chunk -Protocol Any -Profile Any -Enabled True -ErrorAction SilentlyContinue | Out-Null
+    }
+    Write-ToBox $logBing "    $($ipList.Count) IPs blocked via firewall ($chunks rule chunk(s))." "Green"
+
+    $hostsPath    = "$env:SystemRoot\System32\drivers\etc\hosts"
+    $hostsContent = Get-Content $hostsPath -Raw -ErrorAction SilentlyContinue
+    $bingMarker   = "BING BLOCK START"
+    if ($hostsContent -notlike "*$bingMarker*") {
+        $bh  = "`r`nBING BLOCK START`r`n"
+        foreach ($dom in $bingDomains) { $bh += "0.0.0.0 $dom`r`n" }
+        $bh += "BING BLOCK END`r`n"
+        Add-Content -Path $hostsPath -Value $bh
+        Write-ToBox $logBing "    Hosts file patched." "Green"
+    } else {
+        Write-ToBox $logBing "    Hosts file already patched." "Gray"
+    }
+    ipconfig /flushdns | Out-Null
+
+    Write-ToBox $logBing "DONE. Bing is blocked at firewall IP level." "Cyan"
+    $btnBing.Text      = "BLOCK BING SEARCH"
+    $btnBing.BackColor = [System.Drawing.Color]::FromArgb(0, 100, 160)
+    [System.Windows.Forms.MessageBox]::Show("Bing Search is now blocked at the firewall IP level. A reboot is recommended.","Clean Up - Done","OK","Information")
+})
+
 [System.Windows.Forms.Application]::Run($form)
